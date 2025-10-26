@@ -2,14 +2,18 @@
 LangChain 交易工具
 将 Hyperliquid 客户端功能封装为 LangChain Tools
 """
-from typing import Optional, Type, Any
+from typing import Optional, Type, Any, Union
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
 from .hyperliquid_client import HyperliquidClient
+from .mock_client import MockHyperliquidClient
 import json
 import logging
 
 logger = logging.getLogger(__name__)
+
+# 客户端类型
+ClientType = Union[HyperliquidClient, MockHyperliquidClient]
 
 
 # ============ 工具输入模型 ============
@@ -64,7 +68,7 @@ class PlaceOrderTool(BaseTool):
     description: str = """
     在 Hyperliquid 上下单（市价单或限价单）。
     使用 vault 账户执行交易。
-    
+
     参数:
     - symbol: 交易对符号，如 'BTC/USDT:USDT'
     - side: 'buy' 买入或 'sell' 卖出
@@ -72,13 +76,13 @@ class PlaceOrderTool(BaseTool):
     - order_type: 'market' 市价单或 'limit' 限价单
     - price: 限价单价格（仅限价单需要）
     - reduce_only: 是否只减仓（默认 False）
-    
+
     返回: 订单信息（JSON 格式）
     """
     args_schema: Type[BaseModel] = PlaceOrderInput
-    client: HyperliquidClient = Field(default=None)
-    
-    def __init__(self, client: HyperliquidClient):
+    client: Any = Field(default=None)
+
+    def __init__(self, client: ClientType):
         super().__init__(client=client)
     
     def _run(
@@ -132,17 +136,17 @@ class CancelOrderTool(BaseTool):
     name: str = "cancel_order"
     description: str = """
     取消指定的订单。
-    
+
     参数:
     - order_id: 订单 ID
     - symbol: 交易对符号
-    
+
     返回: 取消结果（JSON 格式）
     """
     args_schema: Type[BaseModel] = CancelOrderInput
-    client: HyperliquidClient = Field(default=None)
-    
-    def __init__(self, client: HyperliquidClient):
+    client: Any = Field(default=None)
+
+    def __init__(self, client: ClientType):
         super().__init__(client=client)
     
     def _run(self, order_id: str, symbol: str) -> str:
@@ -165,17 +169,17 @@ class QueryOrderStatusTool(BaseTool):
     name: str = "query_order_status"
     description: str = """
     查询指定订单的状态。
-    
+
     参数:
     - order_id: 订单 ID
     - symbol: 交易对符号
-    
+
     返回: 订单详细信息（JSON 格式）
     """
     args_schema: Type[BaseModel] = QueryOrderInput
-    client: HyperliquidClient = Field(default=None)
-    
-    def __init__(self, client: HyperliquidClient):
+    client: Any = Field(default=None)
+
+    def __init__(self, client: ClientType):
         super().__init__(client=client)
     
     def _run(self, order_id: str, symbol: str) -> str:
@@ -205,16 +209,16 @@ class GetOpenOrdersTool(BaseTool):
     name: str = "get_open_orders"
     description: str = """
     获取当前所有未成交的订单。
-    
+
     参数:
     - symbol: 交易对符号（可选，不填则获取所有交易对的订单）
-    
+
     返回: 订单列表（JSON 格式）
     """
     args_schema: Type[BaseModel] = GetOpenOrdersInput
-    client: HyperliquidClient = Field(default=None)
-    
-    def __init__(self, client: HyperliquidClient):
+    client: Any = Field(default=None)
+
+    def __init__(self, client: ClientType):
         super().__init__(client=client)
     
     def _run(self, symbol: Optional[str] = None) -> str:
@@ -248,13 +252,13 @@ class GetPositionsTool(BaseTool):
     name: str = "get_positions"
     description: str = """
     获取当前所有持仓信息。
-    
+
     返回: 持仓列表（JSON 格式）
     """
     args_schema: Type[BaseModel] = GetPositionsInput
-    client: HyperliquidClient = Field(default=None)
-    
-    def __init__(self, client: HyperliquidClient):
+    client: Any = Field(default=None)
+
+    def __init__(self, client: ClientType):
         super().__init__(client=client)
     
     def _run(self) -> str:
@@ -286,16 +290,16 @@ class GetTickerTool(BaseTool):
     name: str = "get_ticker"
     description: str = """
     获取指定交易对的实时行情数据。
-    
+
     参数:
     - symbol: 交易对符号，如 'BTC/USDT:USDT'
-    
+
     返回: 行情数据（JSON 格式）
     """
     args_schema: Type[BaseModel] = GetTickerInput
-    client: HyperliquidClient = Field(default=None)
-    
-    def __init__(self, client: HyperliquidClient):
+    client: Any = Field(default=None)
+
+    def __init__(self, client: ClientType):
         super().__init__(client=client)
     
     def _run(self, symbol: str) -> str:
@@ -323,16 +327,16 @@ class ClosePositionTool(BaseTool):
     name: str = "close_position"
     description: str = """
     平掉指定交易对的持仓。
-    
+
     参数:
     - symbol: 交易对符号
-    
+
     返回: 平仓结果（JSON 格式）
     """
     args_schema: Type[BaseModel] = ClosePositionInput
-    client: HyperliquidClient = Field(default=None)
-    
-    def __init__(self, client: HyperliquidClient):
+    client: Any = Field(default=None)
+
+    def __init__(self, client: ClientType):
         super().__init__(client=client)
     
     def _run(self, symbol: str) -> str:
@@ -356,13 +360,13 @@ class ClosePositionTool(BaseTool):
             return json.dumps({"error": str(e)}, ensure_ascii=False)
 
 
-def create_trading_tools(client: HyperliquidClient) -> list:
+def create_trading_tools(client: ClientType) -> list:
     """
     创建所有交易工具
-    
+
     Args:
-        client: Hyperliquid 客户端实例
-        
+        client: Hyperliquid 客户端实例（真实或 Mock）
+
     Returns:
         工具列表
     """

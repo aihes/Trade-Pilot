@@ -4,9 +4,8 @@
 """
 from typing import TypedDict, Annotated, Sequence
 from langchain_openai import ChatOpenAI
-from langchain.schema import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolExecutor
 import operator
 import logging
 from .hyperliquid_client import HyperliquidClient
@@ -39,11 +38,10 @@ class TradingAgent:
             model: 使用的模型名称
         """
         self.client = hyperliquid_client
-        
+
         # 创建交易工具
         self.tools = create_trading_tools(hyperliquid_client)
-        self.tool_executor = ToolExecutor(self.tools)
-        
+
         # 初始化 LLM（通过 OpenRouter）
         self.llm = ChatOpenAI(
             model=model,
@@ -74,26 +72,28 @@ class TradingAgent:
             """调用工具节点"""
             messages = state["messages"]
             last_message = messages[-1]
-            
+
             # 执行工具调用
             tool_calls = last_message.tool_calls
-            results = []
-            
+            tool_messages = []
+
             for tool_call in tool_calls:
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
-                
+
                 # 查找并执行工具
                 tool = next((t for t in self.tools if t.name == tool_name), None)
                 if tool:
                     result = tool.invoke(tool_args)
-                    results.append({
-                        "tool_call_id": tool_call["id"],
-                        "output": result
-                    })
-            
+                    # 创建 ToolMessage
+                    tool_message = ToolMessage(
+                        content=str(result),
+                        tool_call_id=tool_call["id"]
+                    )
+                    tool_messages.append(tool_message)
+
             # 返回工具执行结果
-            return {"messages": results}
+            return {"messages": tool_messages}
         
         def should_continue(state: AgentState):
             """判断是否继续"""
