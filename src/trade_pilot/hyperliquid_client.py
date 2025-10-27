@@ -12,42 +12,56 @@ logger = logging.getLogger(__name__)
 
 
 class HyperliquidClient:
-    """Hyperliquid 交易客户端 - 支持钱包地址和私钥认证"""
-    
+    """
+    Hyperliquid 交易客户端
+
+    支持三种认证方式：
+    1. 钱包地址 + 私钥（推荐，用于交易）
+    2. API Key + Secret（官方 API 方式）
+    3. 只读模式（不需要认证，仅查询公开数据）
+    """
+
     def __init__(
         self,
         wallet_address: Optional[str] = None,
         private_key: Optional[str] = None,
         api_key: Optional[str] = None,
         api_secret: Optional[str] = None,
-        testnet: bool = False
+        testnet: bool = False,
+        read_only: bool = False
     ):
         """
         初始化 Hyperliquid 客户端
-        
+
         Args:
-            wallet_address: 钱包地址（推荐）
-            private_key: 钱包私钥（推荐）
-            api_key: API 密钥（已废弃，保留兼容性）
-            api_secret: API 密钥（已废弃，保留兼容性）
+            wallet_address: 钱包地址（用于钱包认证方式）
+            private_key: 钱包私钥（用于钱包认证方式）
+            api_key: API 密钥（用于 API 认证方式）
+            api_secret: API 密钥（用于 API 认证方式）
             testnet: 是否使用测试网
+            read_only: 只读模式（不需要认证，仅查询公开数据）
+
+        认证方式优先级：
+        1. 钱包地址 + 私钥（最推荐）
+        2. API Key + Secret
+        3. 只读模式
         """
         self.testnet = testnet
-        
-        # 优先使用钱包地址和私钥
+        self.read_only = read_only
+
+        # 方式 1: 钱包地址 + 私钥（推荐用于交易）
         if wallet_address and private_key:
-            if not wallet_address:
-                raise ValueError("wallet_address is required")
-            if not private_key:
-                raise ValueError("private_key is required")
-            
+            logger.info("使用钱包地址 + 私钥认证")
             self.exchange = ccxt.hyperliquid({
                 "walletAddress": wallet_address,
                 "privateKey": private_key,
                 "enableRateLimit": True,
             })
-        # 兼容旧的 API key 方式
+            self.auth_method = "wallet"
+
+        # 方式 2: API Key + Secret（官方 API 方式）
         elif api_key and api_secret:
+            logger.info("使用 API Key + Secret 认证")
             self.exchange = ccxt.hyperliquid({
                 'apiKey': api_key,
                 'secret': api_secret,
@@ -57,14 +71,33 @@ class HyperliquidClient:
                     'testnet': testnet
                 }
             })
+            self.auth_method = "api"
+
+        # 方式 3: 只读模式（仅查询公开数据）
+        elif read_only:
+            logger.info("使用只读模式（无认证）")
+            self.exchange = ccxt.hyperliquid({
+                'enableRateLimit': True,
+                'options': {
+                    'defaultType': 'swap',
+                    'testnet': testnet
+                }
+            })
+            self.auth_method = "readonly"
+
         else:
-            raise ValueError("Either (wallet_address, private_key) or (api_key, api_secret) must be provided")
-        
+            raise ValueError(
+                "需要提供以下认证方式之一：\n"
+                "1. wallet_address + private_key（推荐）\n"
+                "2. api_key + api_secret\n"
+                "3. read_only=True（只读模式）"
+            )
+
         # 加载市场数据
         self.markets = {}
         self._load_markets()
-        
-        logger.info(f"Hyperliquid 客户端初始化完成 (testnet={testnet})")
+
+        logger.info(f"Hyperliquid 客户端初始化完成 (认证方式={self.auth_method}, testnet={testnet})")
     
     def _load_markets(self) -> None:
         """加载市场数据"""
