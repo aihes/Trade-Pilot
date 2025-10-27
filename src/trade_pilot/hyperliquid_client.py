@@ -1,113 +1,173 @@
 """
 Hyperliquid 交易客户端封装
 使用 CCXT 库与 Hyperliquid 交易所进行交互
+支持钱包地址+私钥认证方式
 """
 import ccxt
+import pandas as pd
 from typing import Optional, Dict, Any, List
-from decimal import Decimal
 import logging
 
 logger = logging.getLogger(__name__)
 
 
 class HyperliquidClient:
-    """Hyperliquid 交易客户端"""
+    """Hyperliquid 交易客户端 - 支持钱包地址和私钥认证"""
     
     def __init__(
         self,
+        wallet_address: Optional[str] = None,
+        private_key: Optional[str] = None,
         api_key: Optional[str] = None,
         api_secret: Optional[str] = None,
-        testnet: bool = True
+        testnet: bool = False
     ):
         """
         初始化 Hyperliquid 客户端
         
         Args:
-            api_key: API 密钥
-            api_secret: API 密钥
+            wallet_address: 钱包地址（推荐）
+            private_key: 钱包私钥（推荐）
+            api_key: API 密钥（已废弃，保留兼容性）
+            api_secret: API 密钥（已废弃，保留兼容性）
             testnet: 是否使用测试网
         """
         self.testnet = testnet
         
-        # 初始化 CCXT Hyperliquid 客户端
-        self.exchange = ccxt.hyperliquid({
-            'apiKey': api_key,
-            'secret': api_secret,
-            'enableRateLimit': True,
-            'options': {
-                'defaultType': 'swap',  # 永续合约
-                'testnet': testnet
-            }
-        })
+        # 优先使用钱包地址和私钥
+        if wallet_address and private_key:
+            if not wallet_address:
+                raise ValueError("wallet_address is required")
+            if not private_key:
+                raise ValueError("private_key is required")
+            
+            self.exchange = ccxt.hyperliquid({
+                "walletAddress": wallet_address,
+                "privateKey": private_key,
+                "enableRateLimit": True,
+            })
+        # 兼容旧的 API key 方式
+        elif api_key and api_secret:
+            self.exchange = ccxt.hyperliquid({
+                'apiKey': api_key,
+                'secret': api_secret,
+                'enableRateLimit': True,
+                'options': {
+                    'defaultType': 'swap',  # 永续合约
+                    'testnet': testnet
+                }
+            })
+        else:
+            raise ValueError("Either (wallet_address, private_key) or (api_key, api_secret) must be provided")
+        
+        # 加载市场数据
+        self.markets = {}
+        self._load_markets()
         
         logger.info(f"Hyperliquid 客户端初始化完成 (testnet={testnet})")
     
+    def _load_markets(self) -> None:
+        """加载市场数据"""
+        try:
+            self.markets = self.exchange.load_markets()
+            logger.info(f"成功加载 {len(self.markets)} 个交易对")
+        except Exception as e:
+            logger.error(f"加载市场数据失败: {e}")
+            raise Exception(f"Failed to load markets: {str(e)}")
+    
+    def _amount_to_precision(self, symbol: str, amount: float) -> float:
+        """转换数量到交易所精度要求"""
+        try:
+            result = self.exchange.amount_to_precision(symbol, amount)
+            return float(result)
+        except Exception as e:
+            raise Exception(f"Failed to format amount precision: {str(e)}")
+    
+    def _price_to_precision(self, symbol: str, price: float) -> float:
+        """转换价格到交易所精度要求"""
+        try:
+            result = self.exchange.price_to_precision(symbol, price)
+            return float(result)
+        except Exception as e:
+            raise Exception(f"Failed to format price precision: {str(e)}")
+    
+    def get_current_price(self, symbol: str) -> float:
+        """获取当前市场价格"""
+        try:
+            return float(self.markets[symbol]["info"]["midPx"])
+        except Exception as e:
+            raise Exception(f"Failed to get price for {symbol}: {str(e)}")
+    
+    # ========== 余额相关 ==========
+    
     def get_balance(self) -> Dict[str, Any]:
-        """
-        获取账户余额
-        
-        Returns:
-            账户余额信息
-        """
+        """获取账户余额（旧接口）"""
+        return self.fetch_balance()
+    
+    def fetch_balance(self) -> Dict[str, Any]:
+        """获取账户余额"""
         try:
             balance = self.exchange.fetch_balance()
-            logger.info(f"获取余额成功: {balance.get('total', {})}")
+            logger.info("成功获取账户余额")
             return balance
         except Exception as e:
             logger.error(f"获取余额失败: {e}")
-            raise
+            raise Exception(f"Failed to fetch balance: {str(e)}")
     
-    def get_positions(self) -> List[Dict[str, Any]]:
-        """
-        获取当前持仓
-        
-        Returns:
-            持仓列表
-        """
+    # ========== 持仓相关 ==========
+    
+    def get_positions(self, symbols: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """获取持仓（旧接口）"""
+        if symbols:
+            return self.fetch_positions(symbols)
+        else:
+            try:
+                positions = self.exchange.fetch_positions()
+                return [pos for pos in positions if float(pos.get("contracts", 0)) != 0]
+            except Exception as e:
+                logger.error(f"获取持仓失败: {e}")
+                raise
+    
+    def fetch_positions(self, symbols: List[str]) -> List[Dict[str, Any]]:
+        """获取指定交易对的持仓"""
         try:
-            positions = self.exchange.fetch_positions()
-            logger.info(f"获取持仓成功: {len(positions)} 个持仓")
-            return positions
+            positions = self.exchange.fetch_positions(symbols)
+            return [pos for pos in positions if float(pos["contracts"]) != 0]
         except Exception as e:
-            logger.error(f"获取持仓失败: {e}")
-            raise
+            raise Exception(f"Failed to fetch positions: {str(e)}")
+    
+    # ========== 行情相关 ==========
     
     def get_ticker(self, symbol: str) -> Dict[str, Any]:
-        """
-        获取交易对行情
-        
-        Args:
-            symbol: 交易对符号，如 'BTC/USDT:USDT'
-            
-        Returns:
-            行情数据
-        """
+        """获取交易对行情"""
         try:
             ticker = self.exchange.fetch_ticker(symbol)
-            logger.info(f"获取 {symbol} 行情成功: {ticker.get('last')}")
+            logger.info(f"获取 {symbol} 行情成功")
             return ticker
         except Exception as e:
             logger.error(f"获取 {symbol} 行情失败: {e}")
             raise
     
-    def get_orderbook(self, symbol: str, limit: int = 20) -> Dict[str, Any]:
-        """
-        获取订单簿
-        
-        Args:
-            symbol: 交易对符号
-            limit: 深度限制
-            
-        Returns:
-            订单簿数据
-        """
+    def fetch_ohlcv(self, symbol: str, timeframe: str = "1d", limit: int = 100) -> pd.DataFrame:
+        """获取 K 线数据"""
         try:
-            orderbook = self.exchange.fetch_order_book(symbol, limit)
-            logger.info(f"获取 {symbol} 订单簿成功")
-            return orderbook
+            ohlcv_data = self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+            
+            df = pd.DataFrame(
+                data=ohlcv_data,
+                columns=["timestamp", "open", "high", "low", "close", "volume"]
+            )
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+            df = df.set_index("timestamp").sort_index()
+            
+            numeric_cols = ["open", "high", "low", "close", "volume"]
+            df[numeric_cols] = df[numeric_cols].astype(float)
+            
+            return df
         except Exception as e:
-            logger.error(f"获取 {symbol} 订单簿失败: {e}")
-            raise
+            raise Exception(f"Failed to fetch OHLCV data: {str(e)}")
+    
+    # ========== 订单相关 ==========
     
     def create_market_order(
         self,
@@ -116,31 +176,48 @@ class HyperliquidClient:
         amount: float,
         reduce_only: bool = False
     ) -> Dict[str, Any]:
-        """
-        创建市价单
-        
-        Args:
-            symbol: 交易对符号，如 'BTC/USDT:USDT'
-            side: 'buy' 或 'sell'
-            amount: 数量
-            reduce_only: 是否只减仓
-            
-        Returns:
-            订单信息
-        """
+        """创建市价单（旧接口）"""
+        return self.place_market_order(symbol, side, amount, reduce_only)
+    
+    def place_market_order(
+        self, 
+        symbol: str, 
+        side: str, 
+        amount: float,
+        reduce_only: bool = False,
+        take_profit_price: Optional[float] = None,
+        stop_loss_price: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """下市价单"""
         try:
-            params = {'reduceOnly': reduce_only} if reduce_only else {}
-            order = self.exchange.create_market_order(
+            formatted_amount = self._amount_to_precision(symbol, amount)
+            price = float(self.markets[symbol]["info"]["midPx"])
+            formatted_price = self._price_to_precision(symbol, price)
+            
+            params = {"reduceOnly": reduce_only}
+            
+            if take_profit_price is not None:
+                formatted_tp_price = self._price_to_precision(symbol, take_profit_price)
+                params["takeProfitPrice"] = formatted_tp_price
+                
+            if stop_loss_price is not None:
+                formatted_sl_price = self._price_to_precision(symbol, stop_loss_price)
+                params["stopLossPrice"] = formatted_sl_price
+            
+            order = self.exchange.create_order(
                 symbol=symbol,
+                type="market",
                 side=side,
-                amount=amount,
+                amount=formatted_amount,
+                price=formatted_price,
                 params=params
             )
-            logger.info(f"创建市价单成功: {order.get('id')} - {side} {amount} {symbol}")
+            
+            logger.info(f"市价单创建成功: {symbol} {side} {amount}")
             return order
         except Exception as e:
             logger.error(f"创建市价单失败: {e}")
-            raise
+            raise Exception(f"Failed to place market order: {str(e)}")
     
     def create_limit_order(
         self,
@@ -148,151 +225,79 @@ class HyperliquidClient:
         side: str,
         amount: float,
         price: float,
-        reduce_only: bool = False,
-        post_only: bool = False
+        reduce_only: bool = False
     ) -> Dict[str, Any]:
-        """
-        创建限价单
-        
-        Args:
-            symbol: 交易对符号
-            side: 'buy' 或 'sell'
-            amount: 数量
-            price: 价格
-            reduce_only: 是否只减仓
-            post_only: 是否只做 Maker
-            
-        Returns:
-            订单信息
-        """
+        """创建限价单"""
         try:
-            params = {}
-            if reduce_only:
-                params['reduceOnly'] = True
-            if post_only:
-                params['postOnly'] = True
-                
-            order = self.exchange.create_limit_order(
+            formatted_amount = self._amount_to_precision(symbol, amount)
+            formatted_price = self._price_to_precision(symbol, price)
+            
+            params = {"reduceOnly": reduce_only}
+            
+            order = self.exchange.create_order(
                 symbol=symbol,
+                type="limit",
                 side=side,
-                amount=amount,
-                price=price,
+                amount=formatted_amount,
+                price=formatted_price,
                 params=params
             )
-            logger.info(f"创建限价单成功: {order.get('id')} - {side} {amount} {symbol} @ {price}")
+            
+            logger.info(f"限价单创建成功: {symbol} {side} {amount} @ {price}")
             return order
         except Exception as e:
             logger.error(f"创建限价单失败: {e}")
             raise
     
     def cancel_order(self, order_id: str, symbol: str) -> Dict[str, Any]:
-        """
-        取消订单
-        
-        Args:
-            order_id: 订单 ID
-            symbol: 交易对符号
-            
-        Returns:
-            取消结果
-        """
+        """取消订单"""
         try:
             result = self.exchange.cancel_order(order_id, symbol)
-            logger.info(f"取消订单成功: {order_id}")
+            logger.info(f"订单取消成功: {order_id}")
             return result
         except Exception as e:
             logger.error(f"取消订单失败: {e}")
             raise
     
-    def cancel_all_orders(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        取消所有订单
-        
-        Args:
-            symbol: 交易对符号，如果为 None 则取消所有交易对的订单
-            
-        Returns:
-            取消结果列表
-        """
+    def get_order(self, order_id: str, symbol: str) -> Dict[str, Any]:
+        """查询订单状态"""
         try:
-            result = self.exchange.cancel_all_orders(symbol)
-            logger.info(f"取消所有订单成功: {symbol or '所有交易对'}")
-            return result
+            order = self.exchange.fetch_order(order_id, symbol)
+            logger.info(f"查询订单成功: {order_id}")
+            return order
         except Exception as e:
-            logger.error(f"取消所有订单失败: {e}")
+            logger.error(f"查询订单失败: {e}")
             raise
     
     def get_open_orders(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        获取未成交订单
-        
-        Args:
-            symbol: 交易对符号，如果为 None 则获取所有交易对的订单
-            
-        Returns:
-            订单列表
-        """
+        """获取未成交订单"""
         try:
             orders = self.exchange.fetch_open_orders(symbol)
-            logger.info(f"获取未成交订单成功: {len(orders)} 个订单")
+            logger.info(f"获取未成交订单成功: {len(orders)} 个")
             return orders
         except Exception as e:
             logger.error(f"获取未成交订单失败: {e}")
             raise
     
-    def get_order_status(self, order_id: str, symbol: str) -> Dict[str, Any]:
-        """
-        查询订单状态
-        
-        Args:
-            order_id: 订单 ID
-            symbol: 交易对符号
-            
-        Returns:
-            订单详情
-        """
-        try:
-            order = self.exchange.fetch_order(order_id, symbol)
-            logger.info(f"查询订单状态成功: {order_id} - {order.get('status')}")
-            return order
-        except Exception as e:
-            logger.error(f"查询订单状态失败: {e}")
-            raise
+    # ========== 杠杆和保证金 ==========
     
-    def close_position(self, symbol: str) -> Dict[str, Any]:
-        """
-        平仓
-        
-        Args:
-            symbol: 交易对符号
-            
-        Returns:
-            平仓结果
-        """
+    def set_leverage(self, symbol: str, leverage: int) -> bool:
+        """设置杠杆"""
         try:
-            # 获取当前持仓
-            positions = self.get_positions()
-            position = next((p for p in positions if p['symbol'] == symbol), None)
-            
-            if not position or position.get('contracts', 0) == 0:
-                logger.warning(f"没有 {symbol} 的持仓")
-                return {'status': 'no_position'}
-            
-            # 确定平仓方向和数量
-            contracts = abs(position['contracts'])
-            side = 'sell' if position['side'] == 'long' else 'buy'
-            
-            # 创建市价平仓单
-            order = self.create_market_order(
-                symbol=symbol,
-                side=side,
-                amount=contracts,
-                reduce_only=True
-            )
-            
-            logger.info(f"平仓成功: {symbol}")
-            return order
+            self.exchange.set_leverage(leverage, symbol)
+            logger.info(f"设置杠杆成功: {symbol} {leverage}x")
+            return True
         except Exception as e:
-            logger.error(f"平仓失败: {e}")
-            raise
+            logger.error(f"设置杠杆失败: {e}")
+            raise Exception(f"Failed to set leverage: {str(e)}")
+    
+    def set_margin_mode(self, symbol: str, margin_mode: str, leverage: int) -> bool:
+        """设置保证金模式"""
+        try:
+            self.exchange.set_margin_mode(margin_mode, symbol, params={"leverage": leverage})
+            logger.info(f"设置保证金模式成功: {symbol} {margin_mode}")
+            return True
+        except Exception as e:
+            logger.error(f"设置保证金模式失败: {e}")
+            raise Exception(f"Failed to set margin mode: {str(e)}")
 
