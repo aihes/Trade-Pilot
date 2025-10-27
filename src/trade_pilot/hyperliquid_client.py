@@ -10,7 +10,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
+#https://docs.ccxt.com/#/exchanges/hyperliquid?id=createvault
 class HyperliquidClient:
     """
     Hyperliquid 交易客户端
