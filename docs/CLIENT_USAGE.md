@@ -104,6 +104,54 @@ df = client.fetch_ohlcv("BTC/USDC:USDC", "1h", 100)
 
 ---
 
+## 🌐 Endpoint 配置
+
+### 主网、测试网和自定义 Endpoint
+
+Hyperliquid 客户端支持三种 endpoint 配置：
+
+#### 1. 主网（默认）
+
+```python
+client = HyperliquidClient(
+    wallet_address=os.getenv("WALLET_ADDRESS"),
+    private_key=os.getenv("WALLET_PRIVATE_KEY"),
+    testnet=False  # 或者不指定，默认为 False
+)
+# Endpoint: https://api.hyperliquid.xyz
+```
+
+#### 2. 测试网
+
+```python
+client = HyperliquidClient(
+    wallet_address=os.getenv("WALLET_ADDRESS"),
+    private_key=os.getenv("WALLET_PRIVATE_KEY"),
+    testnet=True  # 使用测试网
+)
+# Endpoint: https://api.hyperliquid-testnet.xyz
+```
+
+**测试网特点**:
+- ✅ 使用虚拟资金，无真实风险
+- ✅ 适合开发和测试
+- ✅ 交易对数量: 1352 个（比主网多）
+- ⚠️  数据可能与主网不同
+
+#### 3. 自定义 Endpoint
+
+```python
+client = HyperliquidClient(
+    wallet_address=os.getenv("WALLET_ADDRESS"),
+    private_key=os.getenv("WALLET_PRIVATE_KEY"),
+    custom_endpoint="https://your-custom-endpoint.com"
+)
+```
+
+**注意**: `custom_endpoint` 会覆盖 `testnet` 设置
+
+---
+
 ## 📖 常用方法
 
 ### 市场数据

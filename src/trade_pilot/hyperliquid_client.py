@@ -28,7 +28,8 @@ class HyperliquidClient:
         api_key: Optional[str] = None,
         api_secret: Optional[str] = None,
         testnet: bool = False,
-        read_only: bool = False
+        read_only: bool = False,
+        custom_endpoint: Optional[str] = None
     ):
         """
         初始化 Hyperliquid 客户端
@@ -38,51 +39,94 @@ class HyperliquidClient:
             private_key: 钱包私钥（用于钱包认证方式）
             api_key: API 密钥（用于 API 认证方式）
             api_secret: API 密钥（用于 API 认证方式）
-            testnet: 是否使用测试网
+            testnet: 是否使用测试网（自动设置为 https://api.hyperliquid-testnet.xyz）
             read_only: 只读模式（不需要认证，仅查询公开数据）
+            custom_endpoint: 自定义 API endpoint（可选，会覆盖 testnet 设置）
 
         认证方式优先级：
         1. 钱包地址 + 私钥（最推荐）
         2. API Key + Secret
         3. 只读模式
+
+        Endpoint 设置：
+        - 主网（默认）: https://api.hyperliquid.xyz
+        - 测试网（testnet=True）: https://api.hyperliquid-testnet.xyz
+        - 自定义（custom_endpoint）: 使用指定的 URL
         """
         self.testnet = testnet
         self.read_only = read_only
+        self.custom_endpoint = custom_endpoint
+
+        # 确定使用的 endpoint
+        if custom_endpoint:
+            endpoint_url = custom_endpoint
+            logger.info(f"使用自定义 endpoint: {endpoint_url}")
+        elif testnet:
+            endpoint_url = "https://api.hyperliquid-testnet.xyz"
+            logger.info(f"使用测试网 endpoint: {endpoint_url}")
+        else:
+            endpoint_url = "https://api.hyperliquid.xyz"
+            logger.info(f"使用主网 endpoint: {endpoint_url}")
 
         # 方式 1: 钱包地址 + 私钥（推荐用于交易）
         if wallet_address and private_key:
             logger.info("使用钱包地址 + 私钥认证")
-            self.exchange = ccxt.hyperliquid({
+            config = {
                 "walletAddress": wallet_address,
                 "privateKey": private_key,
                 "enableRateLimit": True,
-            })
+            }
+            # 设置自定义 endpoint
+            if custom_endpoint or testnet:
+                config['urls'] = {
+                    'api': {
+                        'public': endpoint_url,
+                        'private': endpoint_url,
+                    }
+                }
+            self.exchange = ccxt.hyperliquid(config)
             self.auth_method = "wallet"
 
         # 方式 2: API Key + Secret（官方 API 方式）
         elif api_key and api_secret:
             logger.info("使用 API Key + Secret 认证")
-            self.exchange = ccxt.hyperliquid({
+            config = {
                 'apiKey': api_key,
                 'secret': api_secret,
                 'enableRateLimit': True,
                 'options': {
                     'defaultType': 'swap',  # 永续合约
-                    'testnet': testnet
                 }
-            })
+            }
+            # 设置自定义 endpoint
+            if custom_endpoint or testnet:
+                config['urls'] = {
+                    'api': {
+                        'public': endpoint_url,
+                        'private': endpoint_url,
+                    }
+                }
+            self.exchange = ccxt.hyperliquid(config)
             self.auth_method = "api"
 
         # 方式 3: 只读模式（仅查询公开数据）
         elif read_only:
             logger.info("使用只读模式（无认证）")
-            self.exchange = ccxt.hyperliquid({
+            config = {
                 'enableRateLimit': True,
                 'options': {
                     'defaultType': 'swap',
-                    'testnet': testnet
                 }
-            })
+            }
+            # 设置自定义 endpoint
+            if custom_endpoint or testnet:
+                config['urls'] = {
+                    'api': {
+                        'public': endpoint_url,
+                        'private': endpoint_url,
+                    }
+                }
+            self.exchange = ccxt.hyperliquid(config)
             self.auth_method = "readonly"
 
         else:
@@ -97,7 +141,7 @@ class HyperliquidClient:
         self.markets = {}
         self._load_markets()
 
-        logger.info(f"Hyperliquid 客户端初始化完成 (认证方式={self.auth_method}, testnet={testnet})")
+        logger.info(f"Hyperliquid 客户端初始化完成 (认证方式={self.auth_method}, endpoint={endpoint_url})")
     
     def _load_markets(self) -> None:
         """加载市场数据"""
