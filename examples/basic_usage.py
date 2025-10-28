@@ -21,20 +21,51 @@ def example_basic_trading():
     """基础交易示例"""
     
     # 1. 创建 Hyperliquid 客户端
-    client = HyperliquidClient(
-        api_key=os.getenv("HYPERLIQUID_API_KEY"),
-        api_secret=os.getenv("HYPERLIQUID_API_SECRET"),
-        testnet=True  # 使用测试网
-    )
+    # 检查是否有认证信息
+    wallet_address = os.getenv("HYPERLIQUID_API_KEY")
+    private_key = os.getenv("HYPERLIQUID_API_SECRET")
+    
+    if wallet_address and private_key:
+        # 有认证信息，使用钱包模式
+        print("使用钱包认证模式")
+        client = HyperliquidClient(
+            wallet_address=wallet_address,
+            private_key=private_key,
+            testnet=True
+        )
+    else:
+        # 没有认证信息，使用只读模式（需要提供钱包地址查询余额等）
+        print("警告：未设置认证信息，使用只读模式")
+        print("如需查询账户余额等，请在 .env 文件中设置 HYPERLIQUID_WALLET_ADDRESS")
+        
+        # 即使只读模式，也尝试使用钱包地址（如果有的话）用于查询
+        if wallet_address:
+            client = HyperliquidClient(
+                wallet_address=wallet_address,
+                read_only=True,
+                testnet=True
+            )
+        else:
+            # 完全没有钱包地址，使用纯只读模式
+            client = HyperliquidClient(
+                read_only=True,
+                testnet=True
+            )
+    
     
     # 2. 获取账户余额
-    print("\n=== 账户余额 ===")
-    balance = client.get_balance()
-    print(f"总余额: {balance.get('total', {})}")
+    print("\n=== 账户总余额 ===")
+    try:
+        balance = client.get_balance()
+        print(f"总余额: {balance.get('total', {})}")
+        print(f"可用余额: {balance.get('free', {})}")
+        print(f"已用余额: {balance.get('used', {})}")
+    except Exception as e:
+        print(f"获取总余额失败: {e}")
     
     # 3. 获取 BTC 行情
     print("\n=== BTC 行情 ===")
-    ticker = client.get_ticker("BTC/USDT:USDT")
+    ticker = client.get_ticker("BTC/USDC:USDC")
     print(f"最新价: {ticker.get('last')}")
     print(f"买一价: {ticker.get('bid')}")
     print(f"卖一价: {ticker.get('ask')}")
@@ -56,17 +87,20 @@ def example_agent_trading():
     """使用 Agent 进行交易"""
     
     # 1. 创建客户端
+    # 选项 1: 使用钱包地址 + 私钥认证（需要交易功能时）
+    wallet_address = os.getenv("HYPERLIQUID_API_KEY")
+    private_key = os.getenv("HYPERLIQUID_API_SECRET")
     client = HyperliquidClient(
-        api_key=os.getenv("HYPERLIQUID_API_KEY"),
-        api_secret=os.getenv("HYPERLIQUID_API_SECRET"),
-        testnet=True
+        wallet_address=wallet_address,
+        private_key=private_key,
+        testnet=True  # 使用测试网
     )
     
     # 2. 创建 Agent
     agent = TradingAgent(
         hyperliquid_client=client,
         openrouter_api_key=os.getenv("OPENROUTER_API_KEY"),
-        model="anthropic/claude-3.5-sonnet"
+        model=os.getenv("MODEL_NAME")
     )
     
     # 3. 使用 Agent 查询信息
@@ -84,9 +118,12 @@ def example_interactive_chat():
     """交互式聊天示例"""
     
     # 创建客户端
+    # 选项 1: 使用钱包地址 + 私钥认证（需要交易功能时）
+    wallet_address = os.getenv("HYPERLIQUID_API_KEY")
+    private_key = os.getenv("HYPERLIQUID_API_SECRET")
     client = HyperliquidClient(
-        api_key=os.getenv("HYPERLIQUID_API_KEY"),
-        api_secret=os.getenv("HYPERLIQUID_API_SECRET"),
+        wallet_address=wallet_address,
+        private_key=private_key,
         testnet=True
     )
     
