@@ -15,18 +15,21 @@ class HyperliquidClient:
     """
     Hyperliquid 交易客户端
 
-    支持三种认证方式：
+    支持两种认证方式：
     1. 钱包地址 + 私钥（推荐，用于交易）
-    2. API Key + Secret（官方 API 方式）
-    3. 只读模式（不需要认证，仅查询公开数据）
+       - 主钱包认证：使用主钱包地址和私钥
+       - API Wallet 认证：使用 API Wallet 私钥 + vault_address 参数
+    2. 只读模式（不需要认证，仅查询公开数据）
+
+    注意：Hyperliquid 不支持传统的 API Key + Secret 认证方式！
+    如需使用 API Wallet，请在 https://app.hyperliquid.xyz/API 生成并授权。
     """
 
     def __init__(
         self,
         wallet_address: Optional[str] = None,
         private_key: Optional[str] = None,
-        api_key: Optional[str] = None,
-        api_secret: Optional[str] = None,
+        vault_address: Optional[str] = None,
         testnet: bool = False,
         read_only: bool = False,
         custom_endpoint: Optional[str] = None
@@ -35,27 +38,47 @@ class HyperliquidClient:
         初始化 Hyperliquid 客户端
 
         Args:
-            wallet_address: 钱包地址（用于钱包认证方式）
-            private_key: 钱包私钥（用于钱包认证方式）
-            api_key: API 密钥（用于 API 认证方式）
-            api_secret: API 密钥（用于 API 认证方式）
+            wallet_address: 钱包地址
+                - 主钱包模式：主钱包地址
+                - API Wallet 模式：主钱包地址（配合 vault_address 使用）
+            private_key: 私钥
+                - 主钱包模式：主钱包私钥
+                - API Wallet 模式：API Wallet 私钥
+            vault_address: Vault 地址（可选）
+                - 用于 API Wallet 代理子账户或 Vault 进行交易
+                - 如果不指定，默认使用 wallet_address
             testnet: 是否使用测试网（自动设置为 https://api.hyperliquid-testnet.xyz）
             read_only: 只读模式（不需要认证，仅查询公开数据）
             custom_endpoint: 自定义 API endpoint（可选，会覆盖 testnet 设置）
 
-        认证方式优先级：
-        1. 钱包地址 + 私钥（最推荐）
-        2. API Key + Secret
-        3. 只读模式
+        认证方式：
+        1. 主钱包认证（推荐）：
+           HyperliquidClient(wallet_address="0x...", private_key="...")
+
+        2. API Wallet 认证（用于子账户/Vault）：
+           HyperliquidClient(
+               wallet_address="0x...",  # 主钱包地址
+               private_key="...",        # API Wallet 私钥
+               vault_address="0x..."     # 子账户或 Vault 地址
+           )
+
+        3. 只读模式：
+           HyperliquidClient(read_only=True)
 
         Endpoint 设置：
         - 主网（默认）: https://api.hyperliquid.xyz
         - 测试网（testnet=True）: https://api.hyperliquid-testnet.xyz
         - 自定义（custom_endpoint）: 使用指定的 URL
+
+        测试网充值说明：
+        - 必须先在主网用同一地址存入过资金
+        - 访问 https://app.hyperliquid-testnet.xyz/drip 领取测试币
+        - 每次可领取 1,000 mock USDC
         """
         self.testnet = testnet
         self.read_only = read_only
         self.custom_endpoint = custom_endpoint
+        self.vault_address = vault_address
 
         # 确定使用的 endpoint
         if custom_endpoint:
@@ -70,12 +93,21 @@ class HyperliquidClient:
 
         # 方式 1: 钱包地址 + 私钥（推荐用于交易）
         if wallet_address and private_key:
-            logger.info("使用钱包地址 + 私钥认证")
+            if vault_address:
+                logger.info(f"使用 API Wallet 认证（代理账户: {vault_address[:10]}...）")
+            else:
+                logger.info("使用主钱包认证")
+
             config = {
                 "walletAddress": wallet_address,
                 "privateKey": private_key,
                 "enableRateLimit": True,
             }
+
+            # 如果指定了 vault_address，添加到配置中
+            if vault_address:
+                config["vaultAddress"] = vault_address
+
             # 设置自定义 endpoint
             if custom_endpoint or testnet:
                 config['urls'] = {
@@ -87,36 +119,11 @@ class HyperliquidClient:
             self.exchange = ccxt.hyperliquid(config)
             self.auth_method = "wallet"
 
-        # 方式 2: API Key + Secret（官方 API 方式）
-        elif api_key and api_secret:
-            logger.info("使用 API Key + Secret 认证")
-            config = {
-                'apiKey': api_key,
-                'secret': api_secret,
-                'enableRateLimit': True,
-                'options': {
-                    'defaultType': 'swap',  # 永续合约
-                }
-            }
-            # 设置自定义 endpoint
-            if custom_endpoint or testnet:
-                config['urls'] = {
-                    'api': {
-                        'public': endpoint_url,
-                        'private': endpoint_url,
-                    }
-                }
-            self.exchange = ccxt.hyperliquid(config)
-            self.auth_method = "api"
-
-        # 方式 3: 只读模式（仅查询公开数据）
+        # 方式 2: 只读模式（不需要认证）
         elif read_only:
             logger.info("使用只读模式（无认证）")
             config = {
                 'enableRateLimit': True,
-                'options': {
-                    'defaultType': 'swap',
-                }
             }
             # 设置自定义 endpoint
             if custom_endpoint or testnet:
@@ -127,14 +134,18 @@ class HyperliquidClient:
                     }
                 }
             self.exchange = ccxt.hyperliquid(config)
-            self.auth_method = "readonly"
+            self.auth_method = "read_only"
 
         else:
             raise ValueError(
-                "需要提供以下认证方式之一：\n"
-                "1. wallet_address + private_key（推荐）\n"
-                "2. api_key + api_secret\n"
-                "3. read_only=True（只读模式）"
+                "必须提供以下认证方式之一：\n"
+                "1. wallet_address + private_key（钱包认证）\n"
+                "   - 主钱包模式：HyperliquidClient(wallet_address='0x...', private_key='...')\n"
+                "   - API Wallet 模式：HyperliquidClient(wallet_address='0x...', private_key='...', vault_address='0x...')\n"
+                "2. read_only=True（只读模式）\n"
+                "\n"
+                "注意：Hyperliquid 不支持传统的 API Key + Secret 认证！\n"
+                "如需使用 API Wallet，请访问 https://app.hyperliquid.xyz/API 生成并授权。"
             )
 
         # 加载市场数据
