@@ -118,13 +118,22 @@ class HyperliquidClient:
                 }
             self.exchange = ccxt.hyperliquid(config)
             self.auth_method = "wallet"
+            self.wallet_address = wallet_address  # 保存钱包地址以备后用
 
         # 方式 2: 只读模式（不需要认证）
         elif read_only:
-            logger.info("使用只读模式（无认证）")
-            config = {
-                'enableRateLimit': True,
-            }
+            if wallet_address:
+                logger.info(f"使用只读模式（查询钱包: {wallet_address[:10]}...）")
+                config = {
+                    'walletAddress': wallet_address,
+                    'enableRateLimit': True,
+                }
+            else:
+                logger.info("使用只读模式（无认证）")
+                config = {
+                    'enableRateLimit': True,
+                }
+            
             # 设置自定义 endpoint
             if custom_endpoint or testnet:
                 config['urls'] = {
@@ -135,6 +144,7 @@ class HyperliquidClient:
                 }
             self.exchange = ccxt.hyperliquid(config)
             self.auth_method = "read_only"
+            self.wallet_address = wallet_address  # 保存钱包地址以备后用
 
         else:
             raise ValueError(
@@ -194,6 +204,14 @@ class HyperliquidClient:
     
     def fetch_balance(self) -> Dict[str, Any]:
         """获取账户余额"""
+        # 检查是否在只读模式下且未提供钱包地址
+        if self.auth_method == "read_only" and not self.wallet_address:
+            raise Exception(
+                "获取余额失败: 在只读模式下查询余额需要提供钱包地址。\n"
+                "请在初始化时提供 wallet_address 参数（无需私钥）。\n"
+                "示例: HyperliquidClient(wallet_address='0x...', read_only=True)"
+            )
+        
         try:
             balance = self.exchange.fetch_balance()
             logger.info("成功获取账户余额")
