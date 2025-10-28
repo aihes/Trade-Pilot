@@ -20,6 +20,7 @@ Trade-Pilot 是一个智能交易代理系统，通过集成 AI 能力和多源�
 - **AI 模型**: OpenRouter - 多模型 AI 接入平台
 - **交易平台**: Hyperliquid - 去中心化永续合约交易所
 - **包管理**: UV - 快速的 Python 包管理器
+https://github.com/hyperliquid-dex/hyperliquid-python-sdk
 
 ## 快速开始
 
