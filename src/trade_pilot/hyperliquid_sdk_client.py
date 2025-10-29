@@ -419,6 +419,359 @@ class HyperliquidSDKClient:
         except Exception as e:
             raise Exception(f"获取未成交订单失败: {e}")
 
+    def place_limit_order(
+        self,
+        symbol: str,
+        side: str,
+        amount: float,
+        price: float,
+        reduce_only: bool = False
+    ) -> Dict[str, Any]:
+        """
+        下限价单（便捷方法）
+
+        Args:
+            symbol: 交易对符号，例如 "BTC"
+            side: 方向，"buy" 或 "sell"
+            amount: 数量
+            price: 限价
+            reduce_only: 是否只减仓（默认 False）
+
+        Returns:
+            订单结果
+        """
+        if self.read_only:
+            raise Exception("只读模式无法下单")
+
+        try:
+            from hyperliquid.utils.signing import OrderType
+
+            base_symbol = symbol.split('/')[0] if '/' in symbol else symbol
+            is_buy = side.lower() == 'buy'
+
+            result = self.exchange.order(
+                name=base_symbol,
+                is_buy=is_buy,
+                sz=amount,
+                limit_px=price,
+                order_type=OrderType.LIMIT,
+                reduce_only=reduce_only
+            )
+
+            return {
+                'success': True,
+                'result': result,
+                'symbol': base_symbol,
+                'side': side,
+                'amount': amount,
+                'price': price
+            }
+        except Exception as e:
+            raise Exception(f"下限价单失败: {e}")
+
+    def place_market_order(
+        self,
+        symbol: str,
+        side: str,
+        amount: float,
+        slippage: float = 0.05
+    ) -> Dict[str, Any]:
+        """
+        下市价单（便捷方法）
+
+        Args:
+            symbol: 交易对符号，例如 "BTC"
+            side: 方向，"buy" 或 "sell"
+            amount: 数量
+            slippage: 滑点容忍度（默认 5%）
+
+        Returns:
+            订单结果
+        """
+        if self.read_only:
+            raise Exception("只读模式无法下单")
+
+        try:
+            base_symbol = symbol.split('/')[0] if '/' in symbol else symbol
+            is_buy = side.lower() == 'buy'
+
+            # 获取当前价格作为参考
+            current_price = self.get_current_price(base_symbol)
+
+            result = self.exchange.market_open(
+                name=base_symbol,
+                is_buy=is_buy,
+                sz=amount,
+                px=current_price,
+                slippage=slippage
+            )
+
+            return {
+                'success': True,
+                'result': result,
+                'symbol': base_symbol,
+                'side': side,
+                'amount': amount,
+                'reference_price': current_price
+            }
+        except Exception as e:
+            raise Exception(f"下市价单失败: {e}")
+
+    def cancel_order(self, symbol: str, order_id: int) -> Dict[str, Any]:
+        """
+        取消订单（便捷方法）
+
+        Args:
+            symbol: 交易对符号，例如 "BTC"
+            order_id: 订单ID
+
+        Returns:
+            取消结果
+        """
+        if self.read_only:
+            raise Exception("只读模式无法取消订单")
+
+        try:
+            base_symbol = symbol.split('/')[0] if '/' in symbol else symbol
+
+            result = self.exchange.cancel(
+                name=base_symbol,
+                oid=order_id
+            )
+
+            return {
+                'success': True,
+                'result': result,
+                'symbol': base_symbol,
+                'order_id': order_id
+            }
+        except Exception as e:
+            raise Exception(f"取消订单失败: {e}")
+
+    def cancel_all_orders(self, symbol: Optional[str] = None) -> Dict[str, Any]:
+        """
+        取消所有订单
+
+        Args:
+            symbol: 交易对符号（可选），如果不指定则取消所有交易对的订单
+
+        Returns:
+            取消结果
+        """
+        if self.read_only:
+            raise Exception("只读模式无法取消订单")
+
+        try:
+            orders = self.get_open_orders(symbol)
+
+            if not orders:
+                return {
+                    'success': True,
+                    'message': '没有需要取消的订单',
+                    'cancelled_count': 0
+                }
+
+            from hyperliquid.utils.signing import CancelRequest
+
+            cancel_requests = [
+                CancelRequest(coin=order['symbol'], oid=int(order['id']))
+                for order in orders
+            ]
+
+            result = self.exchange.bulk_cancel(cancel_requests)
+
+            return {
+                'success': True,
+                'result': result,
+                'cancelled_count': len(cancel_requests)
+            }
+        except Exception as e:
+            raise Exception(f"取消所有订单失败: {e}")
+
+    def close_position(
+        self,
+        symbol: str,
+        amount: Optional[float] = None,
+        slippage: float = 0.05
+    ) -> Dict[str, Any]:
+        """
+        平仓（便捷方法）
+
+        Args:
+            symbol: 交易对符号，例如 "BTC"
+            amount: 平仓数量（可选，不指定则全部平仓）
+            slippage: 滑点容忍度（默认 5%）
+
+        Returns:
+            平仓结果
+        """
+        if self.read_only:
+            raise Exception("只读模式无法平仓")
+
+        try:
+            base_symbol = symbol.split('/')[0] if '/' in symbol else symbol
+
+            # 获取当前价格作为参考
+            current_price = self.get_current_price(base_symbol)
+
+            result = self.exchange.market_close(
+                coin=base_symbol,
+                sz=amount,
+                px=current_price,
+                slippage=slippage
+            )
+
+            return {
+                'success': True,
+                'result': result,
+                'symbol': base_symbol,
+                'amount': amount or 'all',
+                'reference_price': current_price
+            }
+        except Exception as e:
+            raise Exception(f"平仓失败: {e}")
+
+    def set_leverage(
+        self,
+        symbol: str,
+        leverage: int,
+        is_cross: bool = True
+    ) -> Dict[str, Any]:
+        """
+        设置杠杆（便捷方法）
+
+        Args:
+            symbol: 交易对符号，例如 "BTC"
+            leverage: 杠杆倍数 (1-50)
+            is_cross: 是否全仓模式（True=全仓，False=逐仓）
+
+        Returns:
+            设置结果
+        """
+        if self.read_only:
+            raise Exception("只读模式无法设置杠杆")
+
+        try:
+            base_symbol = symbol.split('/')[0] if '/' in symbol else symbol
+
+            result = self.exchange.update_leverage(
+                leverage=leverage,
+                name=base_symbol,
+                is_cross=is_cross
+            )
+
+            return {
+                'success': True,
+                'result': result,
+                'symbol': base_symbol,
+                'leverage': leverage,
+                'mode': 'cross' if is_cross else 'isolated'
+            }
+        except Exception as e:
+            raise Exception(f"设置杠杆失败: {e}")
+
+    def get_user_state(self) -> Dict[str, Any]:
+        """
+        获取用户状态（包含持仓、订单、余额等完整信息）
+
+        Returns:
+            用户状态信息
+        """
+        if self.read_only:
+            raise Exception("只读模式无法获取用户状态")
+
+        if not self.wallet_address:
+            raise Exception("需要提供钱包地址")
+
+        try:
+            user_state = self.info.user_state(self.wallet_address)
+            return user_state
+        except Exception as e:
+            raise Exception(f"获取用户状态失败: {e}")
+
+    def get_funding_rate(self, symbol: str) -> Dict[str, Any]:
+        """
+        获取资金费率
+
+        Args:
+            symbol: 交易对符号，例如 "BTC"
+
+        Returns:
+            资金费率信息
+        """
+        try:
+            base_symbol = symbol.split('/')[0] if '/' in symbol else symbol
+
+            # 从 meta 中获取资金费率信息
+            meta = self.info.meta()
+
+            for universe_item in meta.get('universe', []):
+                if universe_item.get('name') == base_symbol:
+                    funding = universe_item.get('funding', '0')
+                    return {
+                        'symbol': base_symbol,
+                        'funding_rate': float(funding),
+                        'funding_rate_percent': float(funding) * 100
+                    }
+
+            raise Exception(f"未找到 {base_symbol} 的资金费率信息")
+        except Exception as e:
+            raise Exception(f"获取资金费率失败: {e}")
+
+    def get_order_book(self, symbol: str, depth: int = 10) -> Dict[str, Any]:
+        """
+        获取订单簿
+
+        Args:
+            symbol: 交易对符号，例如 "BTC"
+            depth: 深度（默认 10 档）
+
+        Returns:
+            订单簿信息
+        """
+        try:
+            base_symbol = symbol.split('/')[0] if '/' in symbol else symbol
+
+            l2_data = self.info.l2_snapshot(base_symbol)
+
+            bids = []
+            asks = []
+
+            # l2_data['levels'] 是一个包含两个列表的列表
+            # levels[0] 是买盘（bids），levels[1] 是卖盘（asks）
+            if isinstance(l2_data, dict) and 'levels' in l2_data:
+                levels = l2_data['levels']
+
+                if isinstance(levels, list) and len(levels) >= 2:
+                    # 处理买盘
+                    if isinstance(levels[0], list):
+                        for level in levels[0][:depth]:
+                            if isinstance(level, dict):
+                                bids.append({
+                                    'price': float(level.get('px', 0)),
+                                    'size': float(level.get('sz', 0)),
+                                    'orders': level.get('n', 0)
+                                })
+
+                    # 处理卖盘
+                    if isinstance(levels[1], list):
+                        for level in levels[1][:depth]:
+                            if isinstance(level, dict):
+                                asks.append({
+                                    'price': float(level.get('px', 0)),
+                                    'size': float(level.get('sz', 0)),
+                                    'orders': level.get('n', 0)
+                                })
+
+            return {
+                'symbol': base_symbol,
+                'bids': bids,
+                'asks': asks,
+                'timestamp': l2_data.get('time', 0) if isinstance(l2_data, dict) else 0
+            }
+        except Exception as e:
+            raise Exception(f"获取订单簿失败: {e}")
+
     def __repr__(self) -> str:
         """字符串表示"""
         return (
