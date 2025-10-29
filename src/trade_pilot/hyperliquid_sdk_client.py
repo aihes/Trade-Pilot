@@ -425,7 +425,8 @@ class HyperliquidSDKClient:
         side: str,
         amount: float,
         price: float,
-        reduce_only: bool = False
+        reduce_only: bool = False,
+        tif: str = 'Gtc'
     ) -> Dict[str, Any]:
         """
         下限价单（便捷方法）
@@ -436,6 +437,10 @@ class HyperliquidSDKClient:
             amount: 数量
             price: 限价
             reduce_only: 是否只减仓（默认 False）
+            tif: Time in Force，可选值：'Gtc'（默认）, 'Ioc', 'Alo'
+                 - Gtc: Good Till Cancel（一直有效直到取消）
+                 - Ioc: Immediate or Cancel（立即成交或取消）
+                 - Alo: Add Liquidity Only（只做 Maker）
 
         Returns:
             订单结果
@@ -444,17 +449,18 @@ class HyperliquidSDKClient:
             raise Exception("只读模式无法下单")
 
         try:
-            from hyperliquid.utils.signing import OrderType
-
             base_symbol = symbol.split('/')[0] if '/' in symbol else symbol
             is_buy = side.lower() == 'buy'
+
+            # OrderType 是一个字典，不是枚举
+            order_type = {'limit': {'tif': tif}}
 
             result = self.exchange.order(
                 name=base_symbol,
                 is_buy=is_buy,
                 sz=amount,
                 limit_px=price,
-                order_type=OrderType.LIMIT,
+                order_type=order_type,
                 reduce_only=reduce_only
             )
 

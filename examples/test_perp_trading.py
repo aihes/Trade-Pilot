@@ -86,7 +86,8 @@ def test_place_limit_order(client: HyperliquidSDKClient, current_price: float):
     
     # 设置一个远离市场价的限价单（不会立即成交）
     # 买入价格设置为当前价格的 80%（远低于市场价）
-    limit_price = round(current_price * 0.8, 2)
+    # BTC 的 tick size 是 1，所以价格必须是整数
+    limit_price = round(current_price * 0.8)  # 取整数
     size = 0.001  # 最小交易量
     
     print(f"准备下单:")
@@ -99,33 +100,48 @@ def test_place_limit_order(client: HyperliquidSDKClient, current_price: float):
     
     try:
         # 使用官方 SDK 的 order 方法
-        from hyperliquid.utils.signing import OrderType
-        
+        # OrderType 是一个字典，不是枚举
+        order_type = {'limit': {'tif': 'Gtc'}}  # Gtc = Good Till Cancel
+
         result = client.exchange.order(
             name="BTC",
             is_buy=True,
             sz=size,
             limit_px=limit_price,
-            order_type=OrderType.LIMIT,
+            order_type=order_type,
             reduce_only=False
         )
         
         print(f"\n✅ 下单成功!")
         print(f"   返回结果: {result}")
-        
+
+        # 提取订单ID
+        order_id = None
+        if result.get('status') == 'ok':
+            response_data = result.get('response', {}).get('data', {})
+            statuses = response_data.get('statuses', [])
+            if statuses and 'resting' in statuses[0]:
+                order_id = statuses[0]['resting']['oid']
+                print(f"   订单ID: {order_id}")
+
         # 等待一下让订单进入系统
-        time.sleep(2)
-        
+        print(f"\n⏳ 等待 3 秒让订单进入系统...")
+        time.sleep(3)
+
         # 查询订单状态
         orders = client.get_open_orders("BTC")
         if orders:
-            print(f"\n✅ 订单已确认:")
+            print(f"\n✅ 订单已确认 ({len(orders)} 个):")
             for order in orders:
                 print(f"   订单ID: {order['id']}")
                 print(f"   {order['symbol']}: {order['side']} {order['amount']} @ ${order['price']:,.2f}")
                 print(f"   已成交: {order['filled']}")
                 print(f"   剩余: {order['remaining']}")
-        
+        else:
+            print(f"\n⚠️  查询不到订单（可能已成交或被取消）")
+            if order_id:
+                print(f"   但下单时返回的订单ID是: {order_id}")
+
         return result
     except Exception as e:
         print(f"❌ 下单失败: {e}")
@@ -378,15 +394,12 @@ def main():
     # 测试高级功能（不需要余额）
     test_advanced_features(client)
 
-    if free_balance > 0:
-        print(f"\n💰 账户有余额，可以进行交易测试")
-        order_result = test_place_limit_order(client, current_price)
-        orders = test_query_orders(client)
-        if orders:
-            test_cancel_order(client, orders)
-    else:
-        print(f"\n⚠️  账户余额为 0，跳过交易测试")
-        print(f"   请先充值到测试网: https://app.hyperliquid-testnet.xyz/drip")
+    # 在测试网上，即使余额显示为 0，也可以进行交易测试
+    print(f"\n💡 在测试网上进行实际交易测试（余额显示可能不准确）")
+    order_result = test_place_limit_order(client, current_price)
+    orders = test_query_orders(client)
+    if orders:
+        test_cancel_order(client, orders)
 
     test_market_order(client, current_price)
     test_modify_leverage(client)
