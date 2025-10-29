@@ -11,9 +11,19 @@
 确保 `.env` 文件中配置了以下必要的环境变量：
 
 ```bash
-# Hyperliquid 钱包配置（主钱包）
-WALLET_ADDRESS=0xYourWalletAddress
-WALLET_PRIVATE_KEY=your_private_key
+# Hyperliquid API Wallet 配置（官方推荐方式）
+# API Wallet 地址（从 https://app.hyperliquid.xyz/API 生成）
+HYPERLIQUID_API_KEY=0xYourAPIWalletAddress
+# API Wallet 私钥（用于签名交易）
+HYPERLIQUID_API_SECRET=your_api_wallet_private_key
+
+# 主钱包地址（用于查询账户数据，可选）
+# 如果 API Wallet 代理主账户，则与 API Key 相同
+# 如果 API Wallet 代理子账户，这里填主账户地址
+WALLET_ADDRESS=0xYourMainWalletAddress
+
+# Vault 地址（可选，仅当 API Wallet 代理子账户/Vault 时需要）
+# VAULT_ADDRESS=0xYourVaultAddress
 
 # Hyperliquid 网络配置
 HYPERLIQUID_TESTNET=true  # true=测试网, false=主网
@@ -67,8 +77,9 @@ python examples/basic_usage.py
 ```
 
 **需要的环境变量**：
-- `WALLET_ADDRESS` - 钱包地址
-- `WALLET_PRIVATE_KEY` - 私钥
+- `HYPERLIQUID_API_KEY` - API Wallet 地址
+- `HYPERLIQUID_API_SECRET` - API Wallet 私钥
+- `WALLET_ADDRESS` - 主钱包地址（可选）
 - `HYPERLIQUID_TESTNET` - 网络选择
 - `OPENROUTER_API_KEY` - OpenRouter API Key（仅 Agent 功能需要）
 
@@ -110,8 +121,10 @@ python examples/test_hyperliquid_client.py
 ```
 
 **需要的环境变量**：
-- `WALLET_ADDRESS`
-- `WALLET_PRIVATE_KEY`
+- `HYPERLIQUID_API_KEY`
+- `HYPERLIQUID_API_SECRET`
+- `WALLET_ADDRESS`（可选）
+- `HYPERLIQUID_TESTNET`
 
 ---
 
@@ -152,8 +165,10 @@ python examples/test_sdk_client.py
 ```
 
 **需要的环境变量**：
-- `WALLET_ADDRESS`
-- `WALLET_PRIVATE_KEY`
+- `HYPERLIQUID_API_KEY`
+- `HYPERLIQUID_API_SECRET`
+- `WALLET_ADDRESS`（可选）
+- `HYPERLIQUID_TESTNET`
 
 ---
 
@@ -193,10 +208,11 @@ python examples/test_auth_methods.py
 ```
 
 **需要的环境变量**：
-- `WALLET_ADDRESS` - 主钱包测试
-- `WALLET_PRIVATE_KEY` - 主钱包测试
-- `API_WALLET_PRIVATE_KEY` - API Wallet 测试（可选）
-- `VAULT_ADDRESS` - API Wallet 测试（可选）
+- `HYPERLIQUID_API_KEY` - API Wallet 地址
+- `HYPERLIQUID_API_SECRET` - API Wallet 私钥
+- `WALLET_ADDRESS` - 主钱包地址（可选）
+- `VAULT_ADDRESS` - 子账户测试（可选）
+- `HYPERLIQUID_TESTNET` - 网络选择
 
 ---
 
@@ -236,8 +252,9 @@ python examples/test_endpoints.py
 ```
 
 **需要的环境变量**：
-- `WALLET_ADDRESS` - 钱包认证测试（可选）
-- `WALLET_PRIVATE_KEY` - 钱包认证测试（可选）
+- `HYPERLIQUID_API_KEY` - API Wallet 认证测试（可选）
+- `HYPERLIQUID_API_SECRET` - API Wallet 认证测试（可选）
+- `WALLET_ADDRESS` - 主钱包地址（可选）
 
 ---
 

@@ -27,19 +27,30 @@ def print_section(title: str):
 def test_initialization():
     """测试客户端初始化"""
     print_section("测试 1: 客户端初始化")
-    
+
+    # 优先使用 API Wallet 配置
+    api_address = os.getenv("HYPERLIQUID_API_KEY")
+    api_secret = os.getenv("HYPERLIQUID_API_SECRET")
     wallet_address = os.getenv("WALLET_ADDRESS")
-    private_key = os.getenv("WALLET_PRIVATE_KEY")
-    
-    if not wallet_address or not private_key:
-        print("❌ 错误: 请在 .env 文件中设置 WALLET_ADDRESS 和 WALLET_PRIVATE_KEY")
+    vault_address = os.getenv("VAULT_ADDRESS")
+    testnet = os.getenv("HYPERLIQUID_TESTNET", "false").lower() == "true"
+
+    if not api_address or not api_secret:
+        print("❌ 错误: 请在 .env 文件中设置 HYPERLIQUID_API_KEY 和 HYPERLIQUID_API_SECRET")
         return None
-    
-    print(f"钱包地址: {wallet_address}")
-    print(f"私钥: {private_key[:10]}...{private_key[-10:]}")
-    
+
+    print(f"API 地址: {api_address}")
+    print(f"API 私钥: {api_secret[:10]}...{api_secret[-10:]}")
+    print(f"主钱包地址: {wallet_address or api_address}")
+    print(f"网络: {'测试网' if testnet else '主网'}")
+
     try:
-        client = HyperliquidClient(wallet_address, private_key)
+        client = HyperliquidClient(
+            wallet_address=wallet_address or api_address,
+            private_key=api_secret,
+            vault_address=vault_address,
+            testnet=testnet
+        )
         print("✅ 客户端初始化成功")
         print(f"✅ 加载了 {len(client.markets)} 个交易对")
         return client

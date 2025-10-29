@@ -26,22 +26,27 @@ def print_section(title: str):
 def test_sdk_client():
     """测试官方 SDK 客户端"""
     print_section("测试 Hyperliquid 官方 SDK 客户端")
-    
+
+    # 优先使用 API Wallet 配置
+    api_address = os.getenv("HYPERLIQUID_API_KEY")
+    api_secret = os.getenv("HYPERLIQUID_API_SECRET")
     wallet_address = os.getenv("WALLET_ADDRESS")
-    private_key = os.getenv("WALLET_PRIVATE_KEY")
-    
-    if not wallet_address or not private_key:
-        print("⚠️  未配置 WALLET_ADDRESS 和 WALLET_PRIVATE_KEY")
+    vault_address = os.getenv("VAULT_ADDRESS")
+    testnet = os.getenv("HYPERLIQUID_TESTNET", "false").lower() == "true"
+
+    if not api_address or not api_secret:
+        print("⚠️  未配置 HYPERLIQUID_API_KEY 和 HYPERLIQUID_API_SECRET")
         print("   使用只读模式测试...")
-        
+
         # 只读模式测试
-        client = HyperliquidSDKClient(read_only=True, testnet=False)
+        client = HyperliquidSDKClient(read_only=True, testnet=testnet)
     else:
-        # 钱包认证模式
+        # API Wallet 认证模式
         client = HyperliquidSDKClient(
-            wallet_address=wallet_address,
-            private_key=private_key,
-            testnet=False
+            wallet_address=wallet_address or api_address,
+            private_key=api_secret,
+            vault_address=vault_address,
+            testnet=testnet
         )
     
     print(f"✅ 客户端初始化成功")

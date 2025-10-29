@@ -24,25 +24,32 @@ def print_section(title: str):
 
 
 def test_wallet_auth():
-    """测试方式 1: 主钱包认证"""
-    print_section("测试 1: 主钱包认证")
+    """测试方式 1: API Wallet 认证（官方推荐）"""
+    print_section("测试 1: API Wallet 认证")
 
+    api_address = os.getenv("HYPERLIQUID_API_KEY")
+    api_secret = os.getenv("HYPERLIQUID_API_SECRET")
     wallet_address = os.getenv("WALLET_ADDRESS")
-    private_key = os.getenv("WALLET_PRIVATE_KEY")
+    vault_address = os.getenv("VAULT_ADDRESS")
+    testnet = os.getenv("HYPERLIQUID_TESTNET", "false").lower() == "true"
 
-    if not wallet_address or not private_key:
-        print("⚠️  跳过: 未配置 WALLET_ADDRESS 和 WALLET_PRIVATE_KEY")
+    if not api_address or not api_secret:
+        print("⚠️  跳过: 未配置 HYPERLIQUID_API_KEY 和 HYPERLIQUID_API_SECRET")
         return None
 
     try:
         client = HyperliquidClient(
-            wallet_address=wallet_address,
-            private_key=private_key,
-            testnet=False
+            wallet_address=wallet_address or api_address,
+            private_key=api_secret,
+            vault_address=vault_address,
+            testnet=testnet
         )
-        print(f"✅ 主钱包认证成功")
+        print(f"✅ API Wallet 认证成功")
         print(f"   认证方式: {client.auth_method}")
+        print(f"   API 地址: {api_address}")
+        print(f"   主钱包地址: {wallet_address or api_address}")
         print(f"   交易对数量: {len(client.markets)}")
+        print(f"   网络: {'测试网' if testnet else '主网'}")
 
         # 测试获取价格
         btc_price = client.get_current_price("BTC/USDC:USDC")
@@ -54,29 +61,35 @@ def test_wallet_auth():
 
         return client
     except Exception as e:
-        print(f"❌ 主钱包认证失败: {e}")
+        print(f"❌ API Wallet 认证失败: {e}")
         return None
 
 
 def test_api_wallet_auth():
-    """测试方式 2: API Wallet 认证（如果配置了）"""
-    print_section("测试 2: API Wallet 认证")
+    """测试方式 2: API Wallet 代理子账户（如果配置了 VAULT_ADDRESS）"""
+    print_section("测试 2: API Wallet 代理子账户")
 
+    api_address = os.getenv("HYPERLIQUID_API_KEY")
+    api_secret = os.getenv("HYPERLIQUID_API_SECRET")
     wallet_address = os.getenv("WALLET_ADDRESS")
-    api_wallet_key = os.getenv("API_WALLET_PRIVATE_KEY")
     vault_address = os.getenv("VAULT_ADDRESS")
+    testnet = os.getenv("HYPERLIQUID_TESTNET", "false").lower() == "true"
 
-    if not wallet_address or not api_wallet_key or not vault_address:
-        print("⚠️  跳过: 未配置 API Wallet 相关环境变量")
-        print("   需要配置: WALLET_ADDRESS, API_WALLET_PRIVATE_KEY, VAULT_ADDRESS")
+    if not vault_address:
+        print("⚠️  跳过: 未配置 VAULT_ADDRESS")
+        print("   如果需要代理子账户，请在 .env 中设置 VAULT_ADDRESS")
+        return None
+
+    if not api_address or not api_secret:
+        print("⚠️  跳过: 未配置 HYPERLIQUID_API_KEY 和 HYPERLIQUID_API_SECRET")
         return None
 
     try:
         client = HyperliquidClient(
-            wallet_address=wallet_address,
-            private_key=api_wallet_key,
+            wallet_address=wallet_address or api_address,
+            private_key=api_secret,
             vault_address=vault_address,
-            testnet=False
+            testnet=testnet
         )
         print(f"✅ API Wallet 认证成功")
         print(f"   认证方式: {client.auth_method}")
