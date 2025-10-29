@@ -370,7 +370,55 @@ class HyperliquidSDKClient:
             return df.reset_index(drop=True)
         except Exception as e:
             raise Exception(f"获取 K 线数据失败: {e}")
-    
+
+    def get_open_orders(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        获取未成交订单
+
+        Args:
+            symbol: 交易对符号（可选），例如 "BTC" 或 "BTC/USDC:USDC"
+
+        Returns:
+            未成交订单列表
+        """
+        if self.read_only:
+            raise Exception("只读模式无法获取订单")
+
+        if not self.wallet_address:
+            raise Exception("需要提供钱包地址")
+
+        try:
+            user_state = self.info.user_state(self.wallet_address)
+
+            if not user_state or 'openOrders' not in user_state:
+                return []
+
+            orders = []
+            for order in user_state['openOrders']:
+                order_symbol = order.get('coin', '')
+
+                # 如果指定了 symbol，过滤结果
+                if symbol:
+                    base_symbol = symbol.split('/')[0] if '/' in symbol else symbol
+                    if order_symbol != base_symbol:
+                        continue
+
+                orders.append({
+                    'id': order.get('oid', ''),
+                    'symbol': order_symbol,
+                    'side': order.get('side', '').lower(),
+                    'type': order.get('orderType', ''),
+                    'price': float(order.get('limitPx', 0)),
+                    'amount': float(order.get('sz', 0)),
+                    'filled': float(order.get('sz', 0)) - float(order.get('szLeft', 0)),
+                    'remaining': float(order.get('szLeft', 0)),
+                    'timestamp': order.get('timestamp', 0),
+                })
+
+            return orders
+        except Exception as e:
+            raise Exception(f"获取未成交订单失败: {e}")
+
     def __repr__(self) -> str:
         """字符串表示"""
         return (
