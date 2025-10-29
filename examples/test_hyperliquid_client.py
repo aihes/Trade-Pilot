@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 # 添加项目路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from src.trade_pilot.client.hyperliquid_client import HyperliquidClient
+from src.trade_pilot.hyperliquid_client import HyperliquidClient
 
 # 加载环境变量
 load_dotenv()
