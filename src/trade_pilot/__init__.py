@@ -2,6 +2,7 @@
 Trade-Pilot: AI-Powered Trading Agent
 """
 from .hyperliquid_client import HyperliquidClient
+from .hyperliquid_sdk_client import HyperliquidSDKClient
 from .mock_client import MockHyperliquidClient
 from .agent import TradingAgent
 from .tools import create_trading_tools
@@ -9,6 +10,7 @@ from .tools import create_trading_tools
 __version__ = "0.1.0"
 __all__ = [
     "HyperliquidClient",
+    "HyperliquidSDKClient",
     "MockHyperliquidClient",
     "TradingAgent",
     "create_trading_tools"

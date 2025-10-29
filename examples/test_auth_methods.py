@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 测试 Hyperliquid 客户端的认证方式
+使用官方 SDK（推荐）
 """
 
 import os
@@ -10,7 +11,7 @@ from dotenv import load_dotenv
 # 添加项目路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from src.trade_pilot.hyperliquid_client import HyperliquidClient
+from src.trade_pilot.hyperliquid_sdk_client import HyperliquidSDKClient
 
 # 加载环境变量
 load_dotenv()
@@ -38,7 +39,7 @@ def test_wallet_auth():
         return None
 
     try:
-        client = HyperliquidClient(
+        client = HyperliquidSDKClient(
             wallet_address=wallet_address or api_address,
             private_key=api_secret,
             vault_address=vault_address,
@@ -52,7 +53,7 @@ def test_wallet_auth():
         print(f"   网络: {'测试网' if testnet else '主网'}")
 
         # 测试获取价格
-        btc_price = client.get_current_price("BTC/USDC:USDC")
+        btc_price = client.get_current_price("BTC")
         print(f"   BTC 价格: ${btc_price:,.2f}")
 
         # 测试获取余额
@@ -85,7 +86,7 @@ def test_api_wallet_auth():
         return None
 
     try:
-        client = HyperliquidClient(
+        client = HyperliquidSDKClient(
             wallet_address=wallet_address or api_address,
             private_key=api_secret,
             vault_address=vault_address,
@@ -111,28 +112,28 @@ def test_readonly_mode():
     print_section("测试 3: 只读模式（无认证）")
     
     try:
-        client = HyperliquidClient(
+        client = HyperliquidSDKClient(
             read_only=True,
             testnet=False
         )
         print(f"✅ 只读模式初始化成功")
         print(f"   认证方式: {client.auth_method}")
         print(f"   交易对数量: {len(client.markets)}")
-        
+
         # 测试获取价格
-        sol_price = client.get_current_price("SOL/USDC:USDC")
+        sol_price = client.get_current_price("SOL")
         print(f"   SOL 价格: ${sol_price:,.2f}")
-        
+
         # 测试获取行情
-        ticker = client.get_ticker("BTC/USDC:USDC")
+        ticker = client.get_ticker("BTC")
         print(f"   行情查询: ✅")
-        
+
         # 测试获取 K 线
-        df = client.fetch_ohlcv("BTC/USDC:USDC", "1h", 5)
+        df = client.fetch_ohlcv("BTC", "1h", 5)
         print(f"   K 线查询: ✅ ({len(df)} 根)")
-        
+
         print("\n⚠️  注意: 只读模式无法进行交易操作")
-        
+
         return client
     except Exception as e:
         print(f"❌ 只读模式失败: {e}")
@@ -145,14 +146,14 @@ def test_error_handling():
     
     # 测试没有提供任何认证信息
     try:
-        client = HyperliquidClient()
+        client = HyperliquidSDKClient()
         print("❌ 应该抛出错误但没有")
     except ValueError as e:
         print(f"✅ 正确抛出错误: {str(e)[:50]}...")
-    
+
     # 测试只提供钱包地址没有私钥
     try:
-        client = HyperliquidClient(wallet_address="0x123")
+        client = HyperliquidSDKClient(wallet_address="0x123")
         print("❌ 应该抛出错误但没有")
     except ValueError as e:
         print(f"✅ 正确抛出错误（缺少私钥）")

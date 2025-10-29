@@ -1,11 +1,12 @@
 """
 基础使用示例
 演示如何使用 Trade-Pilot 进行交易
+使用 Hyperliquid 官方 SDK（推荐）
 """
 import os
 import logging
 from dotenv import load_dotenv
-from trade_pilot import HyperliquidClient, TradingAgent
+from trade_pilot import HyperliquidSDKClient, TradingAgent
 
 # 加载环境变量
 load_dotenv()
@@ -35,7 +36,7 @@ def example_basic_trading():
         print(f"   主钱包地址: {wallet_address or api_address}")
         print(f"   网络: {'测试网' if testnet else '主网'}")
 
-        client = HyperliquidClient(
+        client = HyperliquidSDKClient(
             wallet_address=wallet_address or api_address,  # 如果没有指定主钱包，使用 API 地址
             private_key=api_secret,
             vault_address=vault_address,  # 如果有 vault_address，则代理子账户
@@ -45,7 +46,7 @@ def example_basic_trading():
         # 没有认证信息，使用只读模式
         print("⚠️  警告：未设置认证信息，使用只读模式")
         print("   如需交易功能，请在 .env 文件中设置 HYPERLIQUID_API_KEY 和 HYPERLIQUID_API_SECRET")
-        client = HyperliquidClient(
+        client = HyperliquidSDKClient(
             read_only=True,
             testnet=testnet
         )
@@ -121,7 +122,7 @@ def example_agent_trading():
         print("   请在 .env 文件中设置 HYPERLIQUID_API_KEY 和 HYPERLIQUID_API_SECRET")
         return
 
-    client = HyperliquidClient(
+    client = HyperliquidSDKClient(
         wallet_address=wallet_address or api_address,
         private_key=api_secret,
         vault_address=vault_address,
@@ -161,7 +162,7 @@ def example_interactive_chat():
         print("   请在 .env 文件中设置 HYPERLIQUID_API_KEY 和 HYPERLIQUID_API_SECRET")
         return
 
-    client = HyperliquidClient(
+    client = HyperliquidSDKClient(
         wallet_address=wallet_address or api_address,
         private_key=api_secret,
         vault_address=vault_address,
